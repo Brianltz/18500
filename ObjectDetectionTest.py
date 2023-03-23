@@ -4,6 +4,11 @@
 #https://www.youtube.com/watch?v=Cof7CNjDppo&t=640s
 import cv2
 import torch
+import sqlite3
+import pickle
+import socket
+from datetime import datetime
+from pytz import timezone
 from time import time
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -21,6 +26,7 @@ device = 'cpu'
 model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5n.onnx')
 #model = torch.hub.load('ultralytics/yolov5', 'yolov5s') // using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
+dbFile = "rooms.sqlite"
 #goTurnTracker = cv2.TrackerGOTURN_create()
 deepSort = DeepSort(max_age=10,
                    n_init=2,
@@ -35,19 +41,29 @@ trackMap = {}
 dirMap = {} 
 #used to label entrance line of each door in format id : [(x1,y1), (x2,y2)]
 doorid = 0
+tz = timezone('US/Eastern')
 
 leftDoors = {}
 rightDoors = {}
-
-#init for testing given the current footage
-leftDoors[0] = [(233, 447), (239, 422)]
-leftDoors[1] = [(262, 398), (267, 387)]
-rightDoors[2] = [(406, 449), (393, 428)]
-rightDoors[3] = [(534, 635), (508, 590)]
-doorid = 4
-#init count for each room
 doorCounts = {}
-for i in range(4):
+
+doorid = 5
+#init for testing for trimmed2
+#leftDoors[0] = [(262, 398), (267, 387)] 
+#leftDoors[1] = [(233, 447), (239, 422)]
+#rightDoors[2] = [(406, 449), (393, 428)]
+#rightDoors[3] = [(534, 635), (508, 590)]
+#rightDoors[4] = [(361, 374), (365, 384)]
+## doorid = 5
+
+leftDoors[0] = [(301, 347), (291, 362)]
+leftDoors[1] = [(272, 386), (258, 412)]
+rightDoors[2] = [(515, 560), (537, 627)]
+rightDoors[3] =  [(424, 387), (433, 413)]
+rightDoors[4] = [(390, 337), (395, 347)]
+## #init count for each room
+## 
+for i in range(5):
     doorCounts[i] = 0
 
 #keeps track of tracks that have been counted to prevent double count
@@ -134,7 +150,18 @@ def selectDoors(event, x, y, flags, param):
             rightDoors[doorid].append((int(x), int(y)))
         doorCounts[doorid] = 0
         doorid += 1
+        print("doorid", doorid)
+        print("doorCounts", doorCounts)
+        print("leftDoors", leftDoors)
+        print("rightDoors,", rightDoors)
 
+def storeToDB(): # stores count info into db file
+    '''
+    day, time, day_in_week
+    class_in_session is_peak_hours, count, category
+    '''
+    today = datetime.date()
+    return 0
 #coords is the coordinates of the bounding box, ndarray of shape (4,): x1, y1, x2, y2
 def checkCrossDoor(track_id, center, coords):
     global halfx # this is the middle of the frame
@@ -149,23 +176,25 @@ def checkCrossDoor(track_id, center, coords):
     #if (track_id in inIds):
         #print("track id already counted", track_id)
         #return 0
-    x1, y1, x2, y2 = coords
+    xl, yt, xr, yb = coords
+    
     if (center[0] < halfx):
         #case 1
         for id in leftDoors.keys():
             pt0, pt1 = leftDoors[id]
             # if bottom left corner passes the line defining the door
-            if pt1[1] <= y2 and y2 <= pt0[1]: #bottom y coordinate in range of door y coords, pt1 is lower y val bound, pt0 is higher y val bound
+            if pt1[1] <= yb and yb <= pt0[1]: #bottom y coordinate in range of door y coords, pt1 is lower y val bound, pt0 is higher y val bound
                 # line below needs work?
                 # if bottom left of bbox crosses bottom left door corner X and moving left
-                if (x1 <= pt0[0]):
+                if (xl <= pt0[0]):
                     if (track_id not in inIds and dirMap[track_id] == 'L'):
                         doorCounts[id] += 1
                         print(f'leftdoor:{id} increased count to {doorCounts[id]}')
                         # add id to counted ids
                         inIds.append(track_id)
                         print("in ids", inIds)
-                    elif (track_id not in outIds and dirMap[track_id] == 'N'):
+                elif (xl <= pt1[0]):
+                    if (track_id not in outIds and dirMap[track_id] == 'N' and len(trackMap[track_id]) < 5):
                         doorCounts[id] -= 1
                         print(f'leftdoor:{id} decerased count to {doorCounts[id]}')
                         outIds.append(track_id)
@@ -174,30 +203,63 @@ def checkCrossDoor(track_id, center, coords):
         #case 2
         for id in rightDoors.keys():
             pt0, pt1 = rightDoors[id]
-            if pt1[1] <= y2 and y2 <= pt0[1]: #bottom y coordinate in range of door y coords
-                if (pt0[0] <= x2):
+            if pt1[1] <= yb and yb <= pt0[1]: #bottom y coordinate in range of door y coords
+                print("bottom match")
+                if (pt0[0] <= xr):
+                    #print("met requirement for in")
                     if (track_id not in inIds and dirMap[track_id] == 'R'):
                         doorCounts[id] += 1
                         print(f'rightdoor:{id} increased count to {doorCounts[id]}')
                         inIds.append(track_id)
                         print("in ids", inIds)
-                    elif (track_id not in outIds and dirMap[track_id] == 'N'):
+                elif (pt1[0] <= xr):
+                    if (track_id not in outIds and dirMap[track_id] == 'N' and len(trackMap[track_id]) < 5):
                         doorCounts[id] -= 1
                         print(f'rightdoor:{id} decreased count to {doorCounts[id]}')
                         outIds.append(track_id)
                         print("out ids", inIds)
     return 0
 
+def liveVideo(conn, addr):
+    try:
+        #while(True):
+        data = b''
+        data = conn.recv(8)
+        #print(data)
+        imlen = int(data.decode('ascii'))
+          #print(imlen)
+        frame = b''
+        while (len(frame) < imlen):
+            frame += conn.recv(imlen - len(frame))
+             # print(len(frame))
+        framede = pickle.loads(frame, encoding='bytes')
+        framefinal = cv2.imdecode(framede,1)
+        return framefinal
+        #cv2.imshow('frame', framefinal)
+          #out.write(framefinal)
+      
+    except Exception as e:
+        print(e)
+           #s.close()
+           #out.release()
+        cv2.destroyAllWindows()
+
 def main():
     #videoInput = cv2.VideoCapture(0)
-    path = '/Users/bli/Desktop/500/CV/trimmedtest2.mp4'
+    path = '/Users/bli/Desktop/500/CV/test.mp4'
     videoInput = cv2.VideoCapture(path)
-
+    #code for live testing
+    #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #s.bind(('',8888))
+    #s.listen(30)
+    #conn, addr = s.accept()
     try:
         while True:
             ret, frame = videoInput.read()
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
-            if ret == True:
+            #frame = liveVideo(conn, addr)
+            if ret == True: #use this line for video testing
+            #if (1):
+                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
                 frame = cv2.resize(frame, (framex,framey))
                 startTime = time()
                 labels, cords = score_frame(frame)
@@ -213,12 +275,16 @@ def main():
                     bbox = ltrb
                     center = np.array([(bbox[2] + bbox[0])/2, (bbox[3] + bbox[1])/2])
                     coords = np.array(bbox)
+                    val1 = (int(coords[0]),int(coords[3]))
+                    val2 = (int(coords[2]), int(coords[3]))
                     #print("coords", coords)
                     #print("point", point)
                     # update map containing each track and the centerpoint in past 10 frames 
                     updateTrackMap(track_id, center)
+                    
                     checkCrossDoor(track_id, center, coords)
                     cv2.rectangle(f, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0,0,255), 2)
+                    cv2.line(f, val1, val2, (213, 255, 52), 2)
                     cv2.putText(f, "ID: " + str(track_id), (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
                     #lines for testing dimensions
                     cv2.line(f, (halfx, 0),(halfx, framey), (213, 255, 52), 1)
