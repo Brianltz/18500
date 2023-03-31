@@ -25,7 +25,7 @@ import torchvision.models as tmod
 confidenceThreshold = 0.4
 device = 'cpu'
 model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5n.onnx')
-#model = torch.hub.load('ultralytics/yolov5', 'yolov5s') // using onnx model is much faster on cpu, im getting 1-2 fps on this
+# model = torch.hub.load('ultralytics/yolov5', 'yolov5s', device="cpu") # using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
 dbFile = "rooms.sqlite"
 #goTurnTracker = cv2.TrackerGOTURN_create()
@@ -291,11 +291,14 @@ def main():
     #conn, addr = s.accept()
     
     try:
+        frameCounter = 0
         while True:
             ret, frame = videoInput.read()
             #frame = liveVideo(conn, addr)
             if ret == True: #use this line for local video testing
             #if (1):
+                frameCounter += 1
+                if (frameCounter < 100): continue
                 frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
                 frame = cv2.resize(frame, (framex,framey))
                 startTime = time.time()
