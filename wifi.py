@@ -1,6 +1,7 @@
 import cv2
 import socket
 import pickle
+from time import time
 
 width = 1280
 height = 720
@@ -11,7 +12,7 @@ s.bind(('',8888))
 s.listen(30)
 
 conn, addr = s.accept()
-out = cv2.VideoWriter('test.mp4', cv2.VideoWriter_fourcc('m','p','4','v'), 10, (width, height))
+out = cv2.VideoWriter(str(int(time())) + 'test.mp4', cv2.VideoWriter_fourcc('m','p','4','v'), 10, (width, height))
 
 try:
    while(True):
