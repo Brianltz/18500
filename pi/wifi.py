@@ -20,7 +20,7 @@ try:
       packen = pickle.dumps(pack, protocol = 2)
       print(len(packen))
       s.sendall(str(len(packen)).zfill(8).encode('ascii'))
-      s.sendall(int(time()) * 10 ** 9).to_bytes(8, 'little', signed=False) #send unix time
+      s.sendall(int(time()* 1000).to_bytes(8, 'little', signed=False)) #send unix time
       s.sendall(packen)
 except Exception as e:
    print(e)
