@@ -24,7 +24,7 @@ import torchvision.models as tmod
 
 confidenceThreshold = 0.4
 device = 'cpu'
-model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5n.onnx')
+model = torch.hub.load('ultralytics/yolov5', 'custom', '../yolov5/yolov5n.onnx')
 # model = torch.hub.load('ultralytics/yolov5', 'yolov5s', device="cpu") # using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
 dbFile = "rooms.sqlite"
@@ -56,14 +56,26 @@ delayThreshold = 200 #time in milisecond since someone entered a door
 ## #init count for each room
 ## 
 # leftDoors[0] = [(215, 565), (334, 391)]
-doorid = 1
-rightDoors[0] = [(428, 497), (262, 395)]
-#leftDoors[0] = [(240, 455), (400, 401)]
+doorid = 2
+
+#0: [(487, 555), (320, 470)], 1: [(134, 361), (110, 343)]
+
+#for camera looking at second doors
+
+#rightDoors[0] =  [(487, 555), (320, 470)]
+#rightDoors[1] = [(134, 361), (110, 343)]
+
+# for camera looking at first two doors 
+#
+leftDoors[0] = [(96, 617), (291, 525)]
+leftDoors[1] = [(493, 408), (522, 388)]
 for i in range(doorid):
     doorCounts[i] = 0
     doorDelays[i] = 0
 
-
+# for camera looking at later doors
+#[(96, 617), (271, 535)]
+#[(494, 408), (515, 392)]
 
 #keeps track of tracks that have been counted to prevent double count
 inIds = []
@@ -73,10 +85,11 @@ outIds = []
 framex = 640
 framey = 640
 #halfx = framex//2 + 100 
-halfx = 0  
+#halfx = framex
+halfx = 0
 halfy = framey//2
 rightDoorThreshold = 0
-leftDoorThreshold = framex - 200
+leftDoorThreshold = framex
 xbounds = []
 
 tracks = []
@@ -147,7 +160,7 @@ def updateTrackMap(id, center, tracks, dirs):
                 dirs[id] = prevDir + 'n'
     else:
         tracks[id] = [center]
-        dirs[id] = 'N'
+        dirs[id] = 'Nn'
     end = time.time() * 1000
     return None
 
@@ -232,7 +245,7 @@ def checkCrossDoor(track_id, center, coords, f, ids_in, ids_out):
             assert slope < 0
             #print(pt0, pt1)
             # if bottom left corner passes the line defining the door
-            if pt1[1] <= yb and yb <= pt0[1] + 25: #bottom y coordinate in range of door y coords, pt1 is lower y val bound, pt0 is higher y val bound
+            if pt1[1] <= yb and yb <= pt0[1]: #bottom y coordinate in range of door y coords, pt1 is lower y val bound, pt0 is higher y val bound
                 #print("person within leftdoor y bound")
                 # line below needs work?
                 # if bottom left of bbox crosses bottom left door corner X and moving left
@@ -241,7 +254,7 @@ def checkCrossDoor(track_id, center, coords, f, ids_in, ids_out):
                 #print("xbound", xboundary)
                 currTime = time.time() * 1000
                 if (xl <= xboundary):
-                    #print("person in x boundary")
+                    print("person in x boundary")
                     if (track_id not in ids_in 
                         and ('U' in dirMap[track_id] or 'L' in dirMap[track_id]) 
                         and (currTime > doorDelays[id] + delayThreshold)):
@@ -251,8 +264,9 @@ def checkCrossDoor(track_id, center, coords, f, ids_in, ids_out):
                         print(f'leftdoor:{id} increased count to {doorCounts[id]}')
                         ids_in.append(track_id)
                         print("in ids", ids_in)
-                    if (track_id not in ids_out 
-                          and ('D' in dirMap[track_id] or "Nn" in dirMap[track_id]) 
+                    elif (track_id not in ids_out 
+                          #and ('R' in dirMap[track_id] or "D" in dirMap[track_id] or "Nn" in dirMap[track_id]) 
+                          and ("Nn" in dirMap[track_id] or "D" in dirMap[track_id])
                           and (currTime > doorDelays[id] + delayThreshold)
                           and len(trackMap[track_id]) < 5): #this line needed
                         doorCounts[id] -= 1
@@ -262,19 +276,19 @@ def checkCrossDoor(track_id, center, coords, f, ids_in, ids_out):
                         ids_out.append(track_id)
                         print("out ids", ids_in)
                 #end xl <= xbound case
-                else:
-                #elif (xl <= xboundary + 25):
-                    if (track_id not in ids_out 
-                          and ('D' in dirMap[track_id] or "Nn" in dirMap[track_id]) 
-                          and (currTime > doorDelays[id] + delayThreshold)
-                          and len(trackMap[track_id]) < 5
-                          and withinDoorArea(xl, yb, pt0[0], pt0[1], pt1[0], pt1[1], pt1[0], pt1[1] + 25, pt0[0], pt0[1] + 25) == True):
-                        doorCounts[id] -= 1
-                        doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now()) + "\n")
-                        print(f'leftdoor:{id} decreased count to {doorCounts[id]}')
-                        ids_out.append(track_id)
-                        print("out ids", ids_in)
+                #else:
+                ##elif (xl <= xboundary + 25):
+                #    if (track_id not in ids_out 
+                #          and ('D' in dirMap[track_id] or "Nn" in dirMap[track_id]) 
+                #          and (currTime > doorDelays[id] + delayThreshold)
+                #          and len(trackMap[track_id]) < 5
+                #          and withinDoorArea(xl, yb, pt0[0], pt0[1], pt1[0], pt1[1], pt1[0], pt1[1] + 25, pt0[0], pt0[1] + 25) == True):
+                #        doorCounts[id] -= 1
+                #        doorDelays[id] = currTime #time in ms
+                #        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now()) + "\n")
+                #        print(f'leftdoor:{id} decreased count to {doorCounts[id]}')
+                #        ids_out.append(track_id)
+                #        print("out ids", ids_in)
                     
 
     #else:
@@ -386,7 +400,7 @@ def processFeed(frame, outfile):
         pts = np.array([coords[0], [coords[0][0],coords[0][1] + 30], [coords[1][0], coords[1][1] + 30], coords[1]])
         pts = pts.reshape(-1,1,2)
 
-        cv2.polylines(f, [pts], True, (213, 255, 52), 2)
+        cv2.polylines(f, [pts], True, (213, 255, 52), 1)
 
     for id1 in rightDoors.keys():
         coords1 = rightDoors[id1]
@@ -401,18 +415,16 @@ def main():
     outfile = open("test1.txt", 'w')
    
 
-    path = '/Users/bli/Desktop/500/CV/testfiles/1680474179test.mp4' 
-    path1 = '/Users/bli/Desktop/500/CV/testfiles/1680474173test.mp4'
+    #path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
+    path = '/Users/bli/Desktop/500/CV/backend/footages/1680709161test.mp4'
     videoInput = cv2.VideoCapture(path)
     #videoInput1 = cv2.VideoCapture(path1)
-    #scheduler = sched.scheduler(time.time, time.sleep)
-    #thread = Thread(target=startScheduler(scheduler, f), args=(scheduler, f))
-    #thread.start()
+
     #code for live testing
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('',8888))
-    s.listen(30)
-    conn, addr = s.accept()
+    #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #s.bind(('',8888))
+    #s.listen(30)
+    #conn, addr = s.accept()
 #
     #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #s.bind(('',8889))
@@ -421,14 +433,18 @@ def main():
     try:
         frameCounter = 0
         while True:
-            #ret, frame = videoInput.read()
+            ret, frame = videoInput.read()
             #code for live feed
-            frame = liveVideo(conn, addr)
-            #if ret == True: #use this line for local video testing
-            if (1): #live feed code
+            #frame = liveVideo(conn, addr)
+            if ret == True: #use this line for local video testing
+            #if (1): #live feed code
                 start = time.time()
-                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                #frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                if (0 in leftDoors.keys()):
+                    frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                
+                elif (0 in rightDoors.keys()):
+                    frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                
                 frame = cv2.resize(frame, (framex,framey))
                 f = processFeed(frame, outfile)
                 end = time.time()
