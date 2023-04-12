@@ -6,6 +6,7 @@ import cv2
 import torch
 import sqlite3
 import pickle
+import sys
 import sched, time
 import socket
 from datetime import datetime
@@ -24,7 +25,7 @@ import torchvision.models as tmod
 
 confidenceThreshold = 0.4
 device = 'cpu'
-model = torch.hub.load('ultralytics/yolov5', 'custom', '../yolov5/yolov5n.onnx')
+model = torch.hub.load('../yolov5', 'custom', '../yolov5/yolov5n.onnx', source='local')
 # model = torch.hub.load('ultralytics/yolov5', 'yolov5s', device="cpu") # using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
 dbFile = "rooms.sqlite"
@@ -85,8 +86,8 @@ outIds = []
 framex = 640
 framey = 640
 #halfx = framex//2 + 100 
-#halfx = framex
-halfx = 0
+halfx = framex
+#halfx = 0
 halfy = framey//2
 rightDoorThreshold = 0
 leftDoorThreshold = framex
@@ -415,16 +416,16 @@ def main():
     outfile = open("test1.txt", 'w')
    
 
-    #path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
-    path = '/Users/bli/Desktop/500/CV/backend/footages/1680709161test.mp4'
+    path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
+    #path = '/Users/bli/Desktop/500/CV/backend/footages/1680709161test.mp4'
     videoInput = cv2.VideoCapture(path)
     #videoInput1 = cv2.VideoCapture(path1)
 
     #code for live testing
-    #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #s.bind(('',8888))
-    #s.listen(30)
-    #conn, addr = s.accept()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('',int(sys.argv[1])))
+    s.listen(30)
+    conn, addr = s.accept()
 #
     #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #s.bind(('',8889))
@@ -435,9 +436,10 @@ def main():
         while True:
             ret, frame = videoInput.read()
             #code for live feed
-            #frame = liveVideo(conn, addr)
-            if ret == True: #use this line for local video testing
-            #if (1): #live feed code
+            frame = liveVideo(conn, addr)
+            if (1): #live feed code
+            #if ret == True: #use this line for local video testing
+            
                 start = time.time()
                 if (0 in leftDoors.keys()):
                     frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
