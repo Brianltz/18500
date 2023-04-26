@@ -1,14 +1,9 @@
 
-
-#used the following resources to setup yolov5s to process live video feed from camera
-#https://github.com/ultralytics/yolov5
-#https://www.youtube.com/watch?v=Cof7CNjDppo&t=640s
 import cv2
 import torch
 import sqlite3
 import pickle
 import sched, time
-import socket
 from datetime import datetime
 from pytz import timezone
 import numpy as np
@@ -21,22 +16,23 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 import torchvision.models as tmod
 
 
+tz = timezone('US/Eastern') #timezone for datetime
 def getPriorCount(dt, id, cursor):
     #takes in datetime.now return and queries db for prior count
     #returns int of prior count
-    outputlist = []
+    retval = []
     step = 15
     day = dt.month * 100 + dt.day #month|day
     tablename = "room" + str(id)
     for i in range(1,5):
         currstep = 15 * i
         if (dt.minute >= currstep):
-            prior_time = dt.hour * 100 + dt.minute
+            prior_time = dt.hour * 100 + dt.minute - currstep
         else:
             hour = dt.hour
             if hour > 0:
-                hour -= 1
-            minute = dt.minute + (60 - currstep)
+                hour -= 1 # this part need change
+            minute = dt.minute + (60 - currstep)       
             prior_time = hour * 100 + minute
 
         query = f"select count from {tablename} where time={prior_time} and day={day}"
@@ -44,34 +40,33 @@ def getPriorCount(dt, id, cursor):
         priorcount = res.fetchone()
         if (priorcount is None):
             print(f"cannot find prior count for time {prior_time}, day {day} from db, append 0")
-            outputlist.append(0)
+            retval.append(0)
         else:
-            print(f" found prior count for time {prior_time}, day {day} from db, append {priorcount}")
-            outputlist.append(int(priorcount))
-    return outputlist
+            print(f"found prior count for time {prior_time}, day {day} from db, append {priorcount}")
+            retval.append(int(priorcount[0]))
+    return retval
 
 def calculateCategory(count, totalCapacity):
-    capacity = (count / totalCapacity) * 100
+    capacity = (count / totalCapacity)
     if capacity < 0.25:
-        res = 'almost empty'
+        res = 'almost_empty'
     elif capacity < 0.5:
-        res = 'not busy'
+        res = 'not_busy'
     elif capacity < 0.75:
         res = 'busy'
     else:
-        res = 'almost full'
+        res = 'almost_full'
     return res
 
 class outputData:
     # class for capacity data
     # id is room id, cursor is db cursor, totalCap is total cap for the room
-    def __init__(self, count, id, totalCapacity, cursor, conn):
+    def __init__(self, count, id, cursor):
         self.dbcursor = cursor
-        self.dbconn = conn
         self.count = count
-        self.cat = calculateCategory(count, totalCapacity)
+        self.cat = calculateCategory(count, maxcap[id])
         self.id = id
-        t = datetime.now()
+        t = datetime.now(tz)
         self.dayofweek = t.isoweekday()
         self.time = t.hour * 100 + t.minute # time in format hour|minute as int
         self.day = t.month * 100 + t.day
@@ -82,18 +77,20 @@ class outputData:
         self.is_240 = False
         self.is_500 = False
     
-    def storeToDb(self):
+    def storeToDb(self, conn):
         #db order
-        """day, time, day_in_week, class_in_session, is_peak_hours, 
-        is_240, is_500, 1h_prior_count, count, category"""
+        """(day, time, day_in_week, class_in_session, is_peak_hours, is_240, 
+        is_500, 15min_prior_count, 30min_prior_count, 45min_prior_count, 
+        60min_prior_count, count, category)"""
         tableName = "room" + str(self.id)
-        query = f"""INSERT INTO {tableName} (day, time, day_in_week, class_in_session, is_peak_hours,
-        is_240, is_500, 1h_prior_count, count, category) 
+        query = f"""INSERT INTO {tableName} (day, time, day_in_week, class_in_session, 
+        is_peak_hours, is_240, is_500, prior_count_15, prior_count_30, prior_count_45, prior_count_60, count, category) 
         VALUES ({self.day}, {self.time}, {self.dayofweek}, 
         {self.class_in_session}, {self.is_peak_hours}, {self.is_240}, 
-        {self.is_500}, {self.prior_count}, {self.count}, {self.cat})"""
+        {self.is_500}, {self.prior_count[0]}, {self.prior_count[1]}, {self.prior_count[2]}, {self.prior_count[3]}, {self.count}, '{self.cat}')"""
+        #print("db query:", query)
         self.dbcursor.execute(query)
-        self.dbconn.commit() #commit changes
+        conn.commit() #commit changes
 
 class frameGrabber: # to get frames from url
     
@@ -154,6 +151,7 @@ confidenceThreshold = 0.4
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(str(device), "name", torch.cuda.get_device_name())
 model = torch.hub.load('ultralytics/yolov5', 'yolov5n', force_reload=True, device=device) 
+print("model running on cuda: ", next(model.parameters()).is_cuda)
 #model = torch.hub.load('yolov5', 'yolov5/yolov5n.onnx', source='local', device=device)
 #model = torch.hub.load('ultralytics/yolov5', 'yolov5n') # using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
@@ -181,7 +179,7 @@ dirMap1 = {}
 dirMap = {} 
 #used to label entrance line of each door in format id : [(x1,y1), (x2,y2)]
 doorid = 0
-tz = timezone('US/Eastern')
+
 
 leftDoors = {}
 rightDoors = {}
@@ -193,23 +191,30 @@ delayThreshold = 200 #time in milisecond since someone entered a door
 
 doorid = 4
 
-rightDoors[0] =  [(487, 555), (320, 470)]
-rightDoors[1] = [(134, 361), (110, 343)]
-#testing doorboundaries for trimtest
-leftDoors[2] = [(96, 617), (291, 525)]
-leftDoors[3] = [(493, 408), (522, 388)]
+# the doors looking down the hallway (39 pi)
+rightDoors[0] = [(446, 486), (346, 385)] # this is the big room, id 0
+rightDoors[1] = [(229, 271), (213, 250)] # mid room, id 1
+
+
+#134 pi
+leftDoors[3] = [(92, 517), (226, 404)] #big room id 3
+leftDoors[2] =  [(353, 309), (378, 286)] # small room id 2
+doorCounts[0] = 0
+doorCounts[1] = 10
+doorCounts[2] = 3
+doorCounts[3] = 25
 
 ##init max capacity for each room
 maxcap = [10, 30, 50, 50]
 ## #init count for each room
 ## 
-url1 = 'https://7c70-128-2-149-254.ngrok-free.app/video_feed' #right cam
-url = 'https://157c-128-2-149-254.ngrok-free.app/video_feed' #left cam
+url = 'https://2f14-128-2-149-254.ngrok-free.app/video_feed' #left cam, 39 pi
+url1 = 'https://347b-128-2-149-250.ngrok-free.app/video_feed' #right cam, 134 pi
 img_cap = frameGrabber(url).start()
 img_cap1 = frameGrabber(url1).start()
 time.sleep(3)
 for i in range(doorid):
-    doorCounts[i] = 0
+   
     doorDelays[i] = 0
 
 
@@ -234,7 +239,7 @@ tracks = []
 tracks1 = []
 
 #db connection
-dbFile = "rooms.sqlite"
+dbFile = "/content/drive/MyDrive/rooms.sqlite"
 con = sqlite3.connect(dbFile)
 dbcursor = con.cursor()
 
@@ -365,24 +370,25 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, t
                 if (xl <= xboundary):
                     #print("person in x boundary")
                     if (track_id not in ids_in 
-                        and ('U' in dirMap[track_id] or 'L' in dirMap[track_id]) 
-                        and (currTime > doorDelays[id] + delayThreshold)):
+                        and ('LU' in dirMap[track_id] or 'LD' in dirMap[track_id] or 'Ln' in dirMap[track_id]) 
+                        and (currTime > doorDelays[id] + delayThreshold)
+                        and len(track[track_id]) > 5):
                         doorCounts[id] += 1
                         doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now()) + "\n")
+                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now(tz)) + "\n")
                         print(f'leftdoor:{id} increased count to {doorCounts[id]}')
                         ids_in.append(track_id)
                         print("in ids", ids_in)
                     elif (track_id not in ids_out 
                           #and ('R' in dirMap[track_id] or "D" in dirMap[track_id] or "Nn" in dirMap[track_id]) 
-                          and ("Nn" in dirMap[track_id] or "D" in dirMap[track_id])
+                          and (("Nn" in dirMap[track_id] and len(track[track_id]) < 5) or ("R" in dirMap[track_id] and len(track[track_id]) > 5))
                           and (currTime > doorDelays[id] + delayThreshold)
                           and len(track[track_id]) < 5): #this line needed
                         
                         #print("trackid", track_id, "map", track[track_id], "tracks", tracks, "tracks1", tracks1)
                         doorCounts[id] -= 1
                         doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now()) + "\n")
+                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now(tz)) + "\n")
                         print(f'leftdoor:{id} decreased count to {doorCounts[id]}')
                         ids_out.append(track_id)
                         print("out ids", ids_in)
@@ -402,20 +408,22 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, t
                     #print("check cross door called for right door boundary match")
                     currTime = time.time() * 1000
                     if (track_id not in ids_in 
-                        and ('U' in dirMap[track_id] or 'R' in dirMap[track_id]) 
-                        and (currTime > doorDelays[id] + delayThreshold)):
+                        and ('RU' in dirMap[track_id] or 'RD' in dirMap[track_id] or 'Rn' in dirMap[track_id]) 
+                        and (currTime > doorDelays[id] + delayThreshold)
+                        and len(track[track_id]) > 5):
                         doorCounts[id] += 1
                         doorDelays[id] = time.time() * 1000 #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now()) + "\n")
+                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now(tz)) + "\n")
                         print(f'rightdoor:{id} increased count to {doorCounts[id]}')
                         ids_in.append(track_id)
                         print("in ids", ids_in)
                     if (track_id not in ids_out 
-                          and ('L' in dirMap[track_id] or 'Nn' in dirMap[track_id]) 
-                          and (currTime > doorDelays[id] + delayThreshold)):
+                          and (("Nn" in dirMap[track_id] and len(track[track_id]) < 5) or ("L" in dirMap[track_id] and len(track[track_id]) > 5))
+                          and (currTime > doorDelays[id] + delayThreshold)
+                          and len(track[track_id]) < 5):
                         doorCounts[id] -= 1
                         doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now()) + "\n")
+                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now(tz)) + "\n")
                         print(f'rightdoor:{id} decreased count to {doorCounts[id]}')
                         ids_out.append(track_id)
                         print("out ids", ids_in)
@@ -510,7 +518,10 @@ def processFeed(frame, outfile, i) -> np.ndarray:
             cv2.line(f, coords[0], coords[1], (213, 255, 52), 1)
             textx = coords[0][0]
             texty = coords[0][1] + 10
-            cv2.putText(f, str(doorCounts[id]), (textx, texty), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
+            count = str(doorCounts[id])
+            if (id == 0 or id == 3):
+              count = str(doorCounts[0] + doorCounts[3])
+            cv2.putText(f, count, (textx, texty), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
 
     if (i == 0):
         for id1 in rightDoors.keys():
@@ -518,14 +529,17 @@ def processFeed(frame, outfile, i) -> np.ndarray:
             cv2.line(f, coords1[0], coords1[1], (213, 255, 52), 1)
             textx = coords1[0][0]
             texty = coords1[0][1] + 10
-            cv2.putText(f, str(doorCounts[id1]), (textx, texty), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
+            count = str(doorCounts[id1])
+            if (id1 == 0 or id1 == 3):
+              count = str(doorCounts[0] + doorCounts[3])
+            cv2.putText(f, count, (textx, texty), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,0), 1)
     
     return f
 
 def dbUpdate():
     for i in range(len(doorCounts)):
-        data = outputData(doorCounts[i], i, maxcap[i], dbcursor)
-        data.storeToDb() #insert update to dbfile
+        data = outputData(doorCounts[i], i, dbcursor)
+        data.storeToDb(con) #insert update to dbfile
 
 
 def main():
@@ -535,23 +549,9 @@ def main():
 
     #path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
     #path1 = '/Users/bli/Desktop/500/CV/backend/footages/1680725378test.mp4'
-    out = cv2.VideoWriter("/content/drive/MyDrive/500/test5.mp4", cv2.VideoWriter_fourcc('m','p','4','v'), 10, (1280, 640))
+    out = cv2.VideoWriter("/content/drive/MyDrive/500/4-22-1850.mp4", cv2.VideoWriter_fourcc('m','p','4','v'), 10, (1280, 640))
 
-    #videoInput = cv2.VideoCapture(path)
-    #videoInput1 = cv2.VideoCapture(path1)
-    #scheduler = sched.scheduler(time.time, time.sleep)
-    #thread = Thread(target=startScheduler(scheduler, f), args=(scheduler, f))
-    #thread.start()
-    #code for live testing
-    #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #s.bind(('',8888))
-    #s.listen(30)
-    #conn, addr = s.accept()
-##
-    #s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #s1.bind(('',8889))
-    #s1.listen(30)
-    #conn1, addr1 = s1.accept()
+    
     lastupdate = 0 #varaible tracking last update to db
     try:
         frameCounter = 0
@@ -568,9 +568,10 @@ def main():
 
             
             if (int(currTime - lastupdate) > 60000):#if its been 60 sec since last update
+                lastupdate = currTime
                 dbUpdate() #code to update db
 
-            if (int(currTime - startTime) < 60000): #for 300 seconds
+            if (int(currTime - startTime) < 600000): #for 300 seconds
                 frame = img_cap.read()
                 frame1 = img_cap1.read()
                 frameCounter += 1
@@ -580,7 +581,8 @@ def main():
                 for i in range(2):
                     subFrame = None
                     if i == 1:
-                        subFrame = cv2.rotate(frame1, cv2.ROTATE_90_CLOCKWISE)
+                        #subFrame = cv2.rotate(frame1, cv2.ROTATE_90_CLOCKWISE)
+                        subFrame = cv2.rotate(frame1, cv2.ROTATE_90_COUNTERCLOCKWISE)
                     else:
                         subFrame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
                     subFrame = cv2.resize(subFrame, (framex,framey))

@@ -1,3 +1,5 @@
+This is a project that aims to count the capacity of people entering, exiting rooms in a hallway thorugh computer vision. We set up cameras that stream video feed to google colab through ngrok, and processes the videofeed with object detection and tracking to count number of people entering/exiting rooms
+
 yolov5 documentation:
 https://github.com/ultralytics/yolov5
 clone this repo and install requirements with following:
