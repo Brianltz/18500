@@ -1,6 +1,7 @@
 import cv2
 import socket
 import pickle
+import sys
 from time import time
 width = 1280
 height = 720
@@ -12,7 +13,7 @@ cap.set(cv2.CAP_PROP_FPS, 10)
 #172.26.176.135
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 #s.connect(('172.26.212.117',8888))
-s.connect(('172.26.176.135', 8888))
+s.connect((sys.argv[1], 8888))
 try:
    while(True):
       ret, frame = cap.read()

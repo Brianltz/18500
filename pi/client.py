@@ -16,7 +16,8 @@ def main():
    
    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   
-   s.connect((sys.argv[1],8889))
+   #s.connect((sys.argv[1],8889))
+   s.connect((sys.argv[1], 8888))
    
    try:
       while(True):

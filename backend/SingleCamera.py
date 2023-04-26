@@ -57,8 +57,8 @@ delayThreshold = 200 #time in milisecond since someone entered a door
 ## #init count for each room
 ## 
 # leftDoors[0] = [(215, 565), (334, 391)]
-doorid = 2
-
+#doorid = 2
+doorid = 0
 #0: [(487, 555), (320, 470)], 1: [(134, 361), (110, 343)]
 
 #for camera looking at second doors
@@ -68,8 +68,8 @@ doorid = 2
 
 # for camera looking at first two doors 
 #
-leftDoors[0] = [(96, 617), (291, 525)]
-leftDoors[1] = [(493, 408), (522, 388)]
+#leftDoors[0] = [(96, 617), (291, 525)]
+#leftDoors[1] = [(493, 408), (522, 388)]
 for i in range(doorid):
     doorCounts[i] = 0
     doorDelays[i] = 0
@@ -243,7 +243,7 @@ def checkCrossDoor(track_id, center, coords, f, ids_in, ids_out):
         for id in leftDoors.keys():
             pt0, pt1 = leftDoors[id]
             slope = (pt0[0] - pt1[0]) / (pt0[1] - pt1[1])#slope from top point to bottom point
-            assert slope < 0
+            #assert slope < 0
             #print(pt0, pt1)
             # if bottom left corner passes the line defining the door
             if pt1[1] <= yb and yb <= pt0[1]: #bottom y coordinate in range of door y coords, pt1 is lower y val bound, pt0 is higher y val bound
@@ -441,13 +441,15 @@ def main():
             #if ret == True: #use this line for local video testing
             
                 start = time.time()
-                if (0 in leftDoors.keys()):
-                    frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                #if (0 in leftDoors.keys()):
+                #
                 
-                elif (0 in rightDoors.keys()):
-                    frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                
+                #elif (0 in rightDoors.keys()):
                 frame = cv2.resize(frame, (framex,framey))
+                #frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                
+                
                 f = processFeed(frame, outfile)
                 end = time.time()
                 fps = 1/np.round(end - start, 2)
