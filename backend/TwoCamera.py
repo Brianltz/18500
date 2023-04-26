@@ -25,7 +25,7 @@ import torchvision.models as tmod
 
 confidenceThreshold = 0.4
 device = 'cpu'
-model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5/yolov5n.onnx')
+model = torch.hub.load('/Users/bli/Desktop/500/CV/yolov5', 'custom', '../yolov5/yolov5n.onnx', source='local')
 # model = torch.hub.load('ultralytics/yolov5', 'yolov5s', device="cpu") # using onnx model is much faster on cpu, im getting 1-2 fps on this
 classes = model.names
 dbFile = "rooms.sqlite"
@@ -62,28 +62,16 @@ doorDelays = {}
 delayThreshold = 200 #time in milisecond since someone entered a door
 
 
-#init for testing for trimmed2
-#leftDoors[0] = [(262, 398), (267, 387)] 
-#leftDoors[1] = [(233, 447), (239, 422)]
-#rightDoors[2] = [(406, 449), (393, 428)]
-#rightDoors[3] = [(534, 635), (508, 590)]
-#rightDoors[4] = [(365, 384), (361, 374)]
-## doorid = 5
+doorid = 4
 
+rightDoors[0] =  [(487, 555), (320, 470)]
+rightDoors[1] = [(134, 361), (110, 343)]
 #testing doorboundaries for trimtest
-#doorid = 5
-#leftDoors[0] = [(291, 362), (301, 347)]
-#leftDoors[1] = [(258, 412), (272, 386)]
-#rightDoors[2] = [(537, 627), (515, 560)]
-#rightDoors[3] =  [(433, 413), (390, 337)]
-##rightDoors[4] = [(395, 347), (390, 337)]
-#leftDoors[4] = [(308, 334), (314, 323)]
+leftDoors[2] = [(96, 617), (291, 525)]
+leftDoors[3] = [(493, 408), (522, 388)]
 ## #init count for each room
 ## 
-# leftDoors[0] = [(215, 565), (334, 391)]
-doorid = 2
-rightDoors[0] = [(428, 497), (262, 395)]
-leftDoors[0] = [(238, 460), (385, 395)]
+
 for i in range(doorid):
     doorCounts[i] = 0
     doorDelays[i] = 0
@@ -100,20 +88,15 @@ outIds1 = []
 #video frame dimension globals
 framex = 640
 framey = 640
-#halfx = framex//2 + 100 
-halfx = 0  
+halfx = framex//2
 halfy = framey//2
 rightDoorThreshold = 0
 leftDoorThreshold = framex
 xbounds = []
 
 tracks = []
+tracks1 = []
 
-def scheduled_count_update(scheduler, f):
-    scheduler.enter(10, 1, scheduled_count_update, (scheduler, f, ))
-    print("updating count in database")
-    for key in doorCounts.keys():
-        f.write(str(key) + ", count: " + str(doorCounts[key]) + "\n")
 
 def score_frame(frame):
     dim = [frame]
@@ -140,21 +123,22 @@ def plot_box(labels, cords, frame):
             #cv2.putText(frame, class_to_label(labels[i]), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 1, bgr)
     return frame, detections
 
-# finds the displacement of a person over last 10 frames
-def updateTrackMap(id, center, tracks, dirs):
+# finds the displacement of a person over last 6 frames
+# tracks is trackmap id
+def updateTrackMap(id, center, track, dirs):
     offset = 3
     numFrames = 6 
     halfNum = numFrames//2
     # center point coords
-    if id in tracks.keys():
-        tracks[id].append(center)
-        if (len(tracks[id]) > 6):
+    if id in track.keys():
+        track[id].append(center)
+        if (len(track[id]) > 6):
             #print("before modify", tracks[id])
-            tracks[id].pop(0)
+            track[id].pop(0)
             #print("after modify", tracks[id])
-            avgpt1 = sum(tracks[id][0:halfNum]) / halfNum
+            avgpt1 = sum(track[id][0:halfNum]) / halfNum
             #print(avgpt1)
-            avgpt2 = sum(tracks[id][halfNum:numFrames]) / halfNum
+            avgpt2 = sum(track[id][halfNum:numFrames]) / halfNum
             #print(avgpt2)
             slope = avgpt2 - avgpt1
             #print("dx, dy", slope[0], slope[1])
@@ -174,9 +158,9 @@ def updateTrackMap(id, center, tracks, dirs):
             else:
                 dirs[id] = prevDir + 'n'
     else:
-        tracks[id] = [center]
-        dirs[id] = 'N'
-    end = time.time() * 1000
+        track[id] = [center]
+        dirs[id] = 'Nn'
+
     return None
 
 def selectDoors(event, x, y, flags, param):
@@ -201,21 +185,16 @@ def selectDoors(event, x, y, flags, param):
         print("leftDoors", leftDoors)
         print("rightDoors,", rightDoors)
 
-def storeToDB(): # stores count info into db file
-    '''
-    day, time, day_in_week
-    class_in_session is_peak_hours, count, category
-    '''
-    today = datetime.date()
-    return 0
 #coords is the coordinates of the bounding box, ndarray of shape (4,): x1, y1, x2, y2
-def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out):
+def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, track):
      # model xy coordinates with slope
     global halfx # this is the middle of the frame
     global doorid # highest doorid
     global doorCounts #map containing doorid and corresponding counts
     global leftDoors #coordinates of doors, index 0 is bottom coord, index 1 is top coord
     global rightDoors
+    global tracks
+    global tracks1
     '''
     case 1: center left of middle line
     case 2: center right of middle line
@@ -244,50 +223,39 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out):
                 xboundary = pt1[0] + slope*(yb - pt1[1])
                 xbounds.append((xboundary, yb))
                 #print("xbound", xboundary)
+                currTime = time.time() * 1000
                 if (xl <= xboundary):
-                    # if (track_id not in ids_in and dirMap[track_id] == 'L'):
-                    #     doorCounts[id] += 1
-                    #     f.write(str(id) + ", count: " + str(doorCounts[id]) + "   " + str(datetime.now()) + "\n")
-                    #     print(f'leftdoor:{id} increased count to {doorCounts[id]}')
-                    #     # add id to counted ids
-                    #     ids_in.append(track_id)
-                    #     print("in ids", ids_in)
-                    # if (track_id not in ids_out and dirMap[track_id] == 'N' and len(trackMap[track_id]) < 5):
-                    #     doorCounts[id] -= 1
-                    #     f.write(str(id) + ", count: " + str(doorCounts[id]) + "   " + str(datetime.now()) + "\n")
-                    #     print(f'leftdoor:{id} decerased count to {doorCounts[id]}')
-                    #     ids_out.append(track_id)
-                    #     print("out ids", ids_out)
-                    currTime = time.time() * 1000
+                    #print("person in x boundary")
                     if (track_id not in ids_in 
-                        and ('U' in dirMap1[track_id] or 'L' in dirMap1[track_id]) 
+                        and ('U' in dirMap[track_id] or 'L' in dirMap[track_id]) 
                         and (currTime > doorDelays[id] + delayThreshold)):
                         doorCounts[id] += 1
-                        doorDelays[id] = time.time() * 1000 #time in ms
+                        doorDelays[id] = currTime #time in ms
                         f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now()) + "\n")
-                        print(f'rightdoor:{id} increased count to {doorCounts[id]}')
+                        print(f'leftdoor:{id} increased count to {doorCounts[id]}')
                         ids_in.append(track_id)
                         print("in ids", ids_in)
-                #end if xl <= xboundary case
-                elif (xl <= xboundary + 25): 
-                    if (track_id not in ids_out 
-                          and ('R' in dirMap1[track_id] or "Nn" in dirMap1[track_id]) 
+                    elif (track_id not in ids_out 
+                          #and ('R' in dirMap[track_id] or "D" in dirMap[track_id] or "Nn" in dirMap[track_id]) 
+                          and ("Nn" in dirMap[track_id] or "D" in dirMap[track_id])
                           and (currTime > doorDelays[id] + delayThreshold)
-                          and len(trackMap1[track_id]) < 5):
+                          and len(track[track_id]) < 5): #this line needed
+                        
+                        print("trackid", track_id, "map", track[track_id], "tracks", tracks, "tracks1", tracks1)
                         doorCounts[id] -= 1
                         doorDelays[id] = currTime #time in ms
                         f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now()) + "\n")
-                        print(f'rightdoor:{id} decreased count to {doorCounts[id]}')
+                        print(f'leftdoor:{id} decreased count to {doorCounts[id]}')
                         ids_out.append(track_id)
                         print("out ids", ids_in)
 
-    elif (center[0] > rightDoorThreshold and left == False):
+    if (center[0] > rightDoorThreshold and left == False):
         #case 2
         for id in rightDoors.keys():
             pt0, pt1 = rightDoors[id]
             dxdy = (pt0[0] - pt1[0]) / (pt0[1] - pt1[1]) 
             assert dxdy > 0
-            if pt1[1] <= yb and yb <= pt0[1] + 5: #bottom y coordinate in range of door y coords
+            if pt1[1] <= yb and yb <= pt0[1]: #bottom y coordinate in range of door y coords
                 #print("bottom match")
                 xboundary = pt1[0] + dxdy*(yb - pt1[1])
                 xbounds.append((xboundary, yb))
@@ -315,6 +283,7 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out):
                         print("out ids", ids_in)
     return 0
 
+#live video to run on local code
 def liveVideo(conn, addr):
     try:
         #while(True):
@@ -341,53 +310,62 @@ def liveVideo(conn, addr):
            #out.release()
         cv2.destroyAllWindows()
 
-def startScheduler(scheduler, f):
-    scheduler.enter(10, 1, scheduled_count_update, (scheduler, f, ))
-    scheduler.run()
 
-def processFeed(frame, outputFrames, outfile, i):
+
+def processFeed(frame, outfile, i) -> np.ndarray:
     #i = 0 -> right door
     #i = 1 -> left door
     labels, cords = score_frame(frame)
     f, bbs = plot_box(labels, cords, frame)
-
-    if (i == 0):
+    
+    if (i == 0): # first camera
         tracks = deepSort.update_tracks(bbs, frame=f)
-    else:
-        tracks = deepSort1.update_tracks(bbs, frame=f)
+        for track in tracks:
+            if not track.is_confirmed():
+                continue
+            track_id = track.track_id
+            ltrb = track.to_ltrb()
 
-    for track in tracks:
-        if not track.is_confirmed():
-            continue
-        track_id = track.track_id
-        ltrb = track.to_ltrb()
-
-        bbox = ltrb
-        center = np.array([(bbox[2] + bbox[0])/2, (bbox[3] + bbox[1])/2])
-        coords = np.array(bbox)
-        val1 = (int(coords[0]),int(coords[3]))
-        val2 = (int(coords[2]), int(coords[3]))
-        #print("coords", coords)
-        #print("point", point)
-        # update map containing each track and the centerpoint in past 10 frames 
-        
-        if (i == 0):
+            bbox = ltrb
+            center = np.array([(bbox[2] + bbox[0])/2, (bbox[3] + bbox[1])/2])
+            coords = np.array(bbox)
+            val1 = (int(coords[0]),int(coords[3]))
+            val2 = (int(coords[2]), int(coords[3]))
             updateTrackMap(track_id, center, trackMap, dirMap)
-            checkCrossDoor(track_id, center, coords, outfile, False, inIds, outIds)
-        else: 
+            checkCrossDoor(track_id, center, coords, outfile, False, inIds, outIds, dirMap=dirMap, track=trackMap)
+            cv2.rectangle(f, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0,0,255), 2)
+            cv2.line(f, val1, val2, (213, 255, 52), 2)
+            cv2.putText(f, "ID: " + str(track_id), (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
+            #lines for testing dimensions
+            #cv2.line(f, (halfx, 0),(halfx, framey), (213, 255, 52), 1)
+            #cv2.line(f, (0, 10), (10, 10), (255,0,0), 1)
+            cv2.circle(f, (int(center[0]), int(center[1])), 1, (255, 255, 0), -1)
+            if (track_id in dirMap.keys()):
+                cv2.putText(f, dirMap[track_id], (int(bbox[2]) - 10, int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
+    else: # second camera
+        tracks1 = deepSort1.update_tracks(bbs, frame=f)
+        for track in tracks1:
+            if not track.is_confirmed():
+                continue
+            track_id = track.track_id
+            ltrb = track.to_ltrb()
+
+            bbox = ltrb
+            center = np.array([(bbox[2] + bbox[0])/2, (bbox[3] + bbox[1])/2])
+            coords = np.array(bbox)
+            val1 = (int(coords[0]),int(coords[3]))
+            val2 = (int(coords[2]), int(coords[3]))
             updateTrackMap(track_id, center, trackMap1, dirMap1)
-            checkCrossDoor(track_id, center, coords, outfile, True, inIds1, outIds1)
-        cv2.rectangle(f, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0,0,255), 2)
-        cv2.line(f, val1, val2, (213, 255, 52), 2)
-        cv2.putText(f, "ID: " + str(track_id), (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
-        #lines for testing dimensions
-        #cv2.line(f, (halfx, 0),(halfx, framey), (213, 255, 52), 1)
-        #cv2.line(f, (0, 10), (10, 10), (255,0,0), 1)
-        cv2.circle(f, (int(center[0]), int(center[1])), 1, (255, 255, 0), -1)
-        if (i == 0 and track_id in dirMap.keys()):
-            cv2.putText(f, dirMap[track_id], (int(bbox[2]) - 10, int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
-        elif (i == 1 and track_id in dirMap1.keys()):
-            cv2.putText(f, dirMap1[track_id], (int(bbox[2]) - 10, int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
+            checkCrossDoor(track_id, center, coords, outfile, True, inIds1, outIds1, dirMap=dirMap1, track=trackMap1)
+            cv2.rectangle(f, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0,0,255), 2)
+            cv2.line(f, val1, val2, (213, 255, 52), 2)
+            cv2.putText(f, "ID: " + str(track_id), (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
+            #lines for testing dimensions
+            #cv2.line(f, (halfx, 0),(halfx, framey), (213, 255, 52), 1)
+            #cv2.line(f, (0, 10), (10, 10), (255,0,0), 1)
+            cv2.circle(f, (int(center[0]), int(center[1])), 1, (255, 255, 0), -1)
+            if (track_id in dirMap1.keys()):
+                cv2.putText(f, dirMap1[track_id], (int(bbox[2]) - 10, int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
     
     # draw doors
     if (i == 1):
@@ -399,80 +377,67 @@ def processFeed(frame, outputFrames, outfile, i):
         for id1 in rightDoors.keys():
             coords1 = rightDoors[id1]
             cv2.line(f, coords1[0], coords1[1], (213, 255, 52), 1)
-
-    for bound in xbounds:
-        cv2.circle(f, (int(bound[0]), int(bound[1])), 2, (255, 255, 255), -1)
     
-    outputFrames[i] = f
+    return f
 
 def main():
     outfile = open("test1.txt", 'w')
     outfile1 = open("test2.txt", "w")
     outfiles = (outfile, outfile1)
 
-    path = '/Users/bli/Desktop/500/CV/testfiles/1680474179test.mp4' 
-    path1 = '/Users/bli/Desktop/500/CV/testfiles/1680474173test.mp4'
+    path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
+    path1 = '/Users/bli/Desktop/500/CV/backend/footages/1680725378test.mp4'
     videoInput = cv2.VideoCapture(path)
     videoInput1 = cv2.VideoCapture(path1)
     #scheduler = sched.scheduler(time.time, time.sleep)
     #thread = Thread(target=startScheduler(scheduler, f), args=(scheduler, f))
     #thread.start()
     #code for live testing
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('',8888))
-    s.listen(30)
-    conn, addr = s.accept()
-#
-    s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s1.bind(('',8889))
-    s1.listen(30)
-    conn1, addr1 = s1.accept()
+    #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #s.bind(('',8888))
+    #s.listen(30)
+    #conn, addr = s.accept()
+##
+    #s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #s1.bind(('',8889))
+    #s1.listen(30)
+    #conn1, addr1 = s1.accept()
     try:
         frameCounter = 0
         while True:
-            #ret, frame = videoInput.read()
-            #ret1, frame1 = videoInput1.read()
+            ret, frame = videoInput.read()
+            ret1, frame1 = videoInput1.read()
             #code for live feed
-            frame = liveVideo(conn, addr)
-            frame1 = liveVideo(conn1, addr1)
-            frames = []
-            frames.append(frame)
-            frames.append(frame1)
-            #if ret == True or ret1 == True: #use this line for local video testing
-            if (1): #live feed code
+            #frame = liveVideo(conn, addr)
+            #frame1 = liveVideo(conn1, addr1)
+            
+            if ret == True or ret1 == True: #use this line for local video testing
+            #if (1): #live feed code
                 #frameCounter += 1
                 #if (frameCounter < 100): continue
                 start = time.time()
-                outputFrames = {}
+                outputFrames = [0, 0]
                 threads = []
-                for i in range(len(frames)):
-                    subFrame = frames[i]
+                for i in range(2):
+                    subFrame = None
                     if i == 1:
-                        subFrame = cv2.rotate(subFrame, cv2.ROTATE_90_CLOCKWISE)
+                        subFrame = cv2.rotate(frame1, cv2.ROTATE_90_CLOCKWISE)
                     else:
-                        subFrame = cv2.rotate(subFrame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
+                        subFrame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
                     subFrame = cv2.resize(subFrame, (framex,framey))
-                    processFeed(subFrame, outputFrames, outfile, i)
-                    threading.Thread(target=processFeed, args=(subFrame, outputFrames, outfile, i))
-                
-                for thread in threads:
-                    thread.start()
-                for thread in threads:
-                    thread.join()
+                    outputFrames[i] = processFeed(subFrame, outfiles[i], i)
 
                     
                     #print("key", key)
                 ## end of frames loop
 
-                if (len(frames) > 1):
-                    f = np.hstack((outputFrames[0], outputFrames[1]))
-                else:
-                    f = outputFrames[0]
+                
+                f = np.hstack((outputFrames[0], outputFrames[1]))
                 end = time.time()
                 fps = 1/np.round(end - start, 2)
                 cv2.putText(f, f'FPS:{int(fps)}', (20,70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
                 cv2.imshow('test', f)
-                cv2.setMouseCallback('test', selectDoors)
+                #cv2.setMouseCallback('test', selectDoors)
                 key = cv2.pollKey()
                 if (key & 0xFF == ord('p')): #logic to pause video with keyboard input
                     key = cv2.waitKey(0)
@@ -490,7 +455,6 @@ def main():
         outfile.close()
         return 0
     #end of loop
-    #print("trackMap", trackMap)
     print("ending task")
     videoInput.release()
     cv2.destroyAllWindows()

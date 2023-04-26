@@ -21,26 +21,34 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 import torchvision.models as tmod
 
 
-
-
 def getPriorCount(dt, id, cursor):
     #takes in datetime.now return and queries db for prior count
     #returns int of prior count
-    if (dt.hour > 0):
-        lasthour = dt.hour - 1
-    else: lasthour = 0
-
-    prior_time = (lasthour) * 100 + dt.minute
+    outputlist = []
+    step = 15
     day = dt.month * 100 + dt.day #month|day
     tablename = "room" + str(id)
-    query = f"select count from {tablename} where time={prior_time} and day={day}"
-    res = cursor.execute(query)
-    priorcount = res.fetchone()
-    if (priorcount is None):
-        print("cannot find prior count from db, returning 0")
-        return 0
-    else:
-        return int(priorcount)
+    for i in range(1,5):
+        currstep = 15 * i
+        if (dt.minute >= currstep):
+            prior_time = dt.hour * 100 + dt.minute
+        else:
+            hour = dt.hour
+            if hour > 0:
+                hour -= 1
+            minute = dt.minute + (60 - currstep)
+            prior_time = hour * 100 + minute
+
+        query = f"select count from {tablename} where time={prior_time} and day={day}"
+        res = cursor.execute(query)
+        priorcount = res.fetchone()
+        if (priorcount is None):
+            print(f"cannot find prior count for time {prior_time}, day {day} from db, append 0")
+            outputlist.append(0)
+        else:
+            print(f" found prior count for time {prior_time}, day {day} from db, append {priorcount}")
+            outputlist.append(int(priorcount))
+    return outputlist
 
 def calculateCategory(count, totalCapacity):
     capacity = (count / totalCapacity) * 100
@@ -57,8 +65,9 @@ def calculateCategory(count, totalCapacity):
 class outputData:
     # class for capacity data
     # id is room id, cursor is db cursor, totalCap is total cap for the room
-    def __init__(self, count, id, totalCapacity, cursor):
+    def __init__(self, count, id, totalCapacity, cursor, conn):
         self.dbcursor = cursor
+        self.dbconn = conn
         self.count = count
         self.cat = calculateCategory(count, totalCapacity)
         self.id = id
@@ -78,11 +87,13 @@ class outputData:
         """day, time, day_in_week, class_in_session, is_peak_hours, 
         is_240, is_500, 1h_prior_count, count, category"""
         tableName = "room" + str(self.id)
-        query = f"""INSERT INTO {tableName} VALUES ({self.day}, {self.time}, {self.dayofweek}, 
+        query = f"""INSERT INTO {tableName} (day, time, day_in_week, class_in_session, is_peak_hours,
+        is_240, is_500, 1h_prior_count, count, category) 
+        VALUES ({self.day}, {self.time}, {self.dayofweek}, 
         {self.class_in_session}, {self.is_peak_hours}, {self.is_240}, 
         {self.is_500}, {self.prior_count}, {self.count}, {self.cat})"""
         self.dbcursor.execute(query)
-        self.dbcursor.commit() #commit changes
+        self.dbconn.commit() #commit changes
 
 class frameGrabber: # to get frames from url
     
@@ -554,8 +565,10 @@ def main():
             
             #if ret == True or ret1 == True: #use this line for local video testing
             currTime = time.time() * 1000
+
+            
             if (int(currTime - lastupdate) > 60000):#if its been 60 sec since last update
-                dbUpdate()
+                dbUpdate() #code to update db
 
             if (int(currTime - startTime) < 60000): #for 300 seconds
                 frame = img_cap.read()

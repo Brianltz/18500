@@ -1,0 +1,82 @@
+gini index results[4 8 4 0 0] predicted: 0 real output: 0
+[4 7 4 0 0] predicted: 0 real output: 0
+[ 3 14  3  0  1] predicted: 14 real output: 16
+[ 2 19  2  1  1] predicted: 57 real output: 60
+[ 5 17  5  1  1] predicted: 12 real output: 49
+[4 1 4 0 0] predicted: 0 real output: 0
+[1 3 1 0 0] predicted: 0 real output: 0
+[5 5 5 0 0] predicted: 0 real output: 0
+[4 2 4 0 0] predicted: 0 real output: 0
+[2 0 2 0 0] predicted: 0 real output: 0
+[ 3 23  3  0  0] predicted: 0 real output: 11
+[5 0 5 0 0] predicted: 0 real output: 6
+[ 2 22  2  0  0] predicted: 6 real output: 29
+[ 2 17  2  0  1] predicted: 33 real output: 32
+[5 7 5 0 0] predicted: 0 real output: 0
+[ 1 16  1  0  1] predicted: 16 real output: 18
+[ 1 20  1  0  1] predicted: 8 real output: 14
+[ 5 18  5  1  1] predicted: 12 real output: 32
+[ 4 23  4  0  0] predicted: 0 real output: 12
+[3 1 3 0 0] predicted: 0 real output: 0
+[ 4 20  4  1  1] predicted: 47 real output: 66
+[ 2 21  2  1  1] predicted: 57 real output: 57
+[ 1 17  1  1  1] predicted: 8 real output: 32
+[3 0 3 0 0] predicted: 0 real output: 3
+[4 5 4 0 0] predicted: 0 real output: 0
+[2 3 2 0 0] predicted: 0 real output: 0
+[ 1 14  1  0  1] predicted: 16 real output: 10
+[3 5 3 0 0] predicted: 0 real output: 0
+[ 5 23  5  0  0] predicted: 0 real output: 3
+[ 2 14  2  0  1] predicted: 16 real output: 15
+[ 5 12  5  1  1] predicted: 15 real output: 29
+[ 1 18  1  1  1] predicted: 8 real output: 13
+[3 4 3 0 0] predicted: 0 real output: 0
+[ 2 16  2  0  1] predicted: 16 real output: 27
+[ 5 10  5  1  0] predicted: 30 real output: 12
+[ 5 15  5  1  1] predicted: 58 real output: 54
+[ 4 12  4  0  1] predicted: 9 real output: 7
+[3 2 3 0 0] predicted: 0 real output: 0
+[5 1 5 0 0] predicted: 0 real output: 0
+[ 3 18  3  1  1] predicted: 47 real output: 65
+
+entropy results:
+[4 8 4 0 0] predicted: 0 real output: 0
+[4 7 4 0 0] predicted: 0 real output: 0
+[ 3 14  3  0  1] predicted: 16 real output: 16
+[ 2 19  2  1  1] predicted: 8 real output: 60
+[ 5 17  5  1  1] predicted: 12 real output: 49
+[4 1 4 0 0] predicted: 0 real output: 0
+[1 3 1 0 0] predicted: 0 real output: 0
+[5 5 5 0 0] predicted: 0 real output: 0
+[4 2 4 0 0] predicted: 0 real output: 0
+[2 0 2 0 0] predicted: 0 real output: 0
+[ 3 23  3  0  0] predicted: 6 real output: 11
+[5 0 5 0 0] predicted: 0 real output: 6
+[ 2 22  2  0  0] predicted: 6 real output: 29
+[ 2 17  2  0  1] predicted: 8 real output: 32
+[5 7 5 0 0] predicted: 0 real output: 0
+[ 1 16  1  0  1] predicted: 16 real output: 18
+[ 1 20  1  0  1] predicted: 8 real output: 14
+[ 5 18  5  1  1] predicted: 12 real output: 32
+[ 4 23  4  0  0] predicted: 6 real output: 12
+[3 1 3 0 0] predicted: 0 real output: 0
+[ 4 20  4  1  1] predicted: 12 real output: 66
+[ 2 21  2  1  1] predicted: 8 real output: 57
+[ 1 17  1  1  1] predicted: 8 real output: 32
+[3 0 3 0 0] predicted: 0 real output: 3
+[4 5 4 0 0] predicted: 0 real output: 0
+[2 3 2 0 0] predicted: 0 real output: 0
+[ 1 14  1  0  1] predicted: 16 real output: 10
+[3 5 3 0 0] predicted: 0 real output: 0
+[ 5 23  5  0  0] predicted: 6 real output: 3
+[ 2 14  2  0  1] predicted: 16 real output: 15
+[ 5 12  5  1  1] predicted: 12 real output: 29
+[ 1 18  1  1  1] predicted: 8 real output: 13
+[3 4 3 0 0] predicted: 0 real output: 0
+[ 2 16  2  0  1] predicted: 16 real output: 27
+[ 5 10  5  1  0] predicted: 3 real output: 12
+[ 5 15  5  1  1] predicted: 16 real output: 54
+[ 4 12  4  0  1] predicted: 12 real output: 7
+[3 2 3 0 0] predicted: 0 real output: 0
+[5 1 5 0 0] predicted: 0 real output: 0
+[ 3 18  3  1  1] predicted: 8 real output: 65
