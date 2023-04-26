@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+	<head>
+	    <meta charset="utf-8">
+	    {% load static %}
+		<link href="{% static '../static/base.css' %}" rel="stylesheet" type="text/css">
+		<title> {% block title %} People Counter {% endblock %} </title>
+	</head>
+
+	<body>
+        <div id="id_header_div">
+            <div class="big-heading" id="id_site_name">
+                People Counter
+            </div>
+            <div class="user-info">
+                {% block user-info %}
+                <div>
+                    <a href="{% url 'login' %}">
+                        <button id="id_login_link">Login</button>
+                    </a>
+                </div>
+                {% endblock %}
+            </div>
+            {% comment %} <div class="search-bar">
+                {% block search-bar %}
+                {% endblock %}
+            </div>
+
+            {% if message %}
+                <div class="message">
+                    {{message}}
+                </div>
+            {% endif %} {% endcomment %}
+
+        </div>
+
+
+	    <div class="content">
+		    {% block content %}
+            <p id="id_page_name">Register for People Counter:</p>
+
+            <form method="post" action="{% url 'register' %}">
+                <table>
+                    {% for field in form.visible_fields %}
+                        <tr>
+                            <td>{{field.label_tag}}</td>
+                            <td>{{field}}</td>
+                            <td class="errorlist">
+                                {% for error in field.errors %} {{error}} {% endfor %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </table>
+                {% csrf_token %}
+                <button id="id_register_button" type="submit">Register</button>
+            </form>
+
+            {% for error in form.non_field_errors %}
+                <p class="errorlist">
+                    {{ error }}
+                </p>
+            {% endfor %}
+
+        {% endblock %}
+		</div>
+	</body>
+
+
+</html>

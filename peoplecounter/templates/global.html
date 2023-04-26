@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h3 id="id_page_name">Hamerschlag Hall 1300 Wing Occupancy Estimation and Prediction</h3>
+    <div class="row">
+        <div class="column">
+            <img id="id_user_picture" src="/static/ham.jpg">
+        </div>
+        <div class="column">
+            <p>Current time is: 
+            <span> {{curMonth}}&#47;{{curDay}}&#47;{{curYear}} </span>
+            <span>{{curHour}}&#58;{{curMin}}</span>
+            </p>
+        </div>
+    </div>
+{% endblock %}

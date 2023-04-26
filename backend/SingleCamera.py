@@ -26,7 +26,7 @@ import torchvision.models as tmod
 confidenceThreshold = 0.4
 device = 'cpu'
 model = torch.hub.load('../yolov5', 'custom', '../yolov5/yolov5n.onnx', source='local')
-# model = torch.hub.load('ultralytics/yolov5', 'yolov5s', device="cpu") # using onnx model is much faster on cpu, im getting 1-2 fps on this
+#model = torch.hub.load('ultralytics/yolov5', 'yolov5n.onnx') # 
 classes = model.names
 dbFile = "rooms.sqlite"
 #goTurnTracker = cv2.TrackerGOTURN_create()
@@ -57,7 +57,7 @@ delayThreshold = 200 #time in milisecond since someone entered a door
 ## #init count for each room
 ## 
 # leftDoors[0] = [(215, 565), (334, 391)]
-doorid = 2
+doorid = 0
 
 #0: [(487, 555), (320, 470)], 1: [(134, 361), (110, 343)]
 
@@ -68,11 +68,11 @@ doorid = 2
 
 # for camera looking at first two doors 
 #
-leftDoors[0] = [(96, 617), (291, 525)]
-leftDoors[1] = [(493, 408), (522, 388)]
-for i in range(doorid):
-    doorCounts[i] = 0
-    doorDelays[i] = 0
+#leftDoors[0] = [(96, 617), (291, 525)]
+#leftDoors[1] = [(493, 408), (522, 388)]
+#for i in range(doorid):
+#    doorCounts[i] = 0
+#    doorDelays[i] = 0
 
 # for camera looking at later doors
 #[(96, 617), (271, 535)]
@@ -416,14 +416,16 @@ def main():
     outfile = open("test1.txt", 'w')
    
 
-    path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
+    #path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
     #path = '/Users/bli/Desktop/500/CV/backend/footages/1680709161test.mp4'
-    videoInput = cv2.VideoCapture(path)
+    #videoInput = cv2.VideoCapture(path)
     #videoInput1 = cv2.VideoCapture(path1)
 
     #code for live testing
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    print(sys.argv[1])
     s.bind(('',int(sys.argv[1])))
+
     s.listen(30)
     conn, addr = s.accept()
 #
@@ -434,19 +436,21 @@ def main():
     try:
         frameCounter = 0
         while True:
-            ret, frame = videoInput.read()
+            #ret, frame = videoInput.read()
             #code for live feed
             frame = liveVideo(conn, addr)
             if (1): #live feed code
             #if ret == True: #use this line for local video testing
             
                 start = time.time()
-                if (0 in leftDoors.keys()):
-                    frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-                
-                elif (0 in rightDoors.keys()):
-                    frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                
+                #if (0 in leftDoors.keys()):
+                #    frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                #
+                #elif (0 in rightDoors.keys()):
+                #    frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                #else:
+                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
                 frame = cv2.resize(frame, (framex,framey))
                 f = processFeed(frame, outfile)
                 end = time.time()
@@ -466,14 +470,14 @@ def main():
                 break
     except KeyboardInterrupt:
         print("ending task by interrupt")
-        videoInput.release()
+        #videoInput.release()
         cv2.destroyAllWindows()
         outfile.close()
         return 0
     #end of loop
     #print("trackMap", trackMap)
     print("ending task")
-    videoInput.release()
+    #videoInput.release()
     cv2.destroyAllWindows()
     outfile.close()
     return 0
