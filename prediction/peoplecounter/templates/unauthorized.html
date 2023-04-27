@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    {% load static %}
+    <link href="{% static '../static/base.css' %}" rel="stylesheet" type="text/css">
+    <title>People Counter</title>
+</head>
+
+<body>
+
+<div class="title">Unauthorized</div>
+
+<div class="login-info">
+    You are logged in as
+    {{ request.user.first_name }}
+    {{ request.user.last_name }}
+    (email={{ request.user.email }})
+</div>
+
+<div class="login-info">
+    You must login with a CMU identity (ending in @andrew.cmu.edu) to access this website
+</div>
+
+<form action="{% url 'logout' %}" method="get">
+    <input type="submit" value="Logout">
+</form>
+
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+	<head>
+	    <meta charset="utf-8">
+	    {% load static %}
+		<link href="{% static '../static/base.css' %}" rel="stylesheet" type="text/css">
+		<title> {% block title %} People Counter {% endblock %} </title>
+
+	</head>
+
+	<body>
+        <div id="id_header_div">
+            <div class="big-heading" id="id_site_name">
+                People Counter
+            </div>
+            <div class="user-info">
+                {% block user-info %}
+                <div>
+                    <p id="id_user_name">{{request.user.first_name}} {{request.user.last_name}}</p>
+                    {% comment %} <a href="{% url 'myprofile' %}">
+                        <button id="id_nav_profile"> {{request.user.first_name}} {{request.user.last_name}} </button>
+                    </a> {% endcomment %}
+                    <a href="{% url 'global' %}">
+                        <button id="id_nav_global_stream">Global</button>
+                    </a>
+                    <a href="{% url 'logout' %}">
+                        <button id="id_nav_logout">Logout</button>
+                    </a>
+                </div>
+                {% endblock %}
+            </div>
+        </div>
+
+	    {% comment %} <div class="search-bar">
+			{% block search-bar %}
+			{% endblock %}
+		</div>
+
+	    {% if message %}
+	        <div class="message">
+	            {{message}}
+	        </div>
+	    {% endif %} {% endcomment %}
+
+	    <div class="content">
+		    {% block content %}
+		    {% endblock %}
+		</div>
+	</body>
+</html>

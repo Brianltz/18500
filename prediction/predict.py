@@ -5,6 +5,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import classification_report
+from sklearn.tree import plot_tree
+import matplotlib.pyplot as plt
+from matplotlib import rcParams
+
+rcParams['figure.figsize'] = (25, 20)
 
 
 def importdata():
@@ -18,7 +23,7 @@ def importdata():
 def splitdataset(model_data):
 
     # Separating the target variable
-    X = model_data.values[:, 0:11]
+    X = model_data.values[:, 1:11]
     Y = model_data.values[:, 14]
 
     # Splitting the dataset into train and test
@@ -34,20 +39,35 @@ def train_using_gini(X_train, X_test, y_train):
 
     # Creating the classifier object
     clf_gini = DecisionTreeClassifier(
-        criterion="gini", random_state=100, max_depth=10, min_samples_leaf=2
+        criterion="gini", random_state=100, max_depth=5, min_samples_leaf=2, class_weight={1: 0.5, 2: 0.5, 3: 1.5, 4: 1.0, 5: 1.0, 6: 1.0, 7: 0.5, 8: 0.5, 9: 0.5, 10: 0.5}
     )
 
     # Performing training
     clf_gini.fit(X_train, y_train)
     return clf_gini
 
+def visualize(model_data, X_train, y_train):
+
+    model = DecisionTreeClassifier(criterion = 'gini', max_depth = 4)
+    model.fit(X_train, y_train)
+    print(type(model_data))
+    feature_names = model_data.columns[:11].map(str)
+    target_names = np.array_str(model_data['total_cat'].unique())
+    print()
+    plot_tree(model, 
+          feature_names = feature_names, 
+          class_names = target_names, 
+          filled = True, 
+          rounded = True)
+
+    plt.savefig('tree_visualization.png') 
 
 # Function to perform training with entropy.
 def train_using_entropy(X_train, X_test, y_train):
 
     # Decision tree with entropy
     clf_entropy = DecisionTreeClassifier(
-        criterion="entropy", random_state=100, max_depth=3, min_samples_leaf=5
+        criterion="entropy", random_state=100, max_depth=5, min_samples_leaf=3, class_weight={1: 0.5, 2: 0.5, 3: 1.5, 4: 1.0, 5: 1.0, 6: 1.0, 7: 0.5, 8: 0.5, 9: 0.5, 10: 0.5}
     )
 
     # Performing training
@@ -95,7 +115,7 @@ def classification_error(y_tr, y_t):
     count = 0
     for i in range(len(y_tr)):
         tr_cat = categorize(firstMax, secondMax, thirdMax, y_tr[i])
-        print(tr_cat)
+        #print(tr_cat)
         t_cat = categorize(firstMax, secondMax, thirdMax, y_t[i])
         if tr_cat != t_cat:
             count += 1
@@ -106,6 +126,7 @@ def main():
     # Building Phase
     data = importdata()
     X, Y, X_train, X_test, y_train, y_test = splitdataset(data)
+    visualize(data, X_train, y_train)
     # print("X: ", X)
     # print("Y: ", Y)
     clf_gini = train_using_gini(X_train, X_test, y_train)
@@ -149,6 +170,7 @@ def main():
     entropy_class_error = classification_error(y_pred_gini, y_test)
     print("entropy classification error", entropy_class_error)
     f.close()
+
 
 
 # Calling main function

@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+	<head>
+	    <meta charset="utf-8">
+	    {% load static %}
+		<link href="{% static '../static/base.css' %}" rel="stylesheet" type="text/css">
+		<title> {% block title %} People Counter {% endblock %} </title>
+	</head>
+
+	<body>
+        <div id="id_header_div">
+            <div class="big-heading" id="id_site_name">
+                People Counter
+            </div>
+            <div class="user-info">
+                {% block user-info %}
+                <div>
+                    <a href="{% url 'register' %}">
+                        <button id="id_register_link">Register</button>
+                    </a>
+                </div>
+                {% endblock %}
+            </div>
+            {% comment %} <div class="search-bar">
+                {% block search-bar %}
+                {% endblock %}
+            </div>
+
+            {% if message %}
+                <div class="message">
+                    {{message}}
+                </div>
+            {% endif %} {% endcomment %}
+
+        </div>
+
+	    <div class="content">
+            {% block content %}
+            <p id="id_page_name">Login to People Counter:</p>
+
+            <form method="post" action="{% url 'login' %}">
+                <table>
+                    {{form}}
+                </table>
+                {% csrf_token %}
+                <button id="id_login_button" type="submit">Submit</button>
+            </form>
+
+            {% endblock %}
+		</div>
+	</body>
+
+
+
+
+
+</html>
