@@ -4,13 +4,15 @@ import torch
 import sqlite3
 import pickle
 import sched, time
+import socket
 from datetime import datetime
 from pytz import timezone
 import numpy as np
 from threading import Thread
 import requests
 import sqlite3
-
+import psycopg2
+import pandas as pd
 
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import torchvision.models as tmod
@@ -36,9 +38,9 @@ def getPriorCount(dt, id, cursor):
             prior_time = hour * 100 + minute
 
         query = f"select count from {tablename} where time={prior_time} and day={day}"
-        res = cursor.execute(query)
-        priorcount = res.fetchone()
-        if (priorcount is None):
+        cursor.execute(query)
+        priorcount = cursor.fetchone()
+        if (priorcount is None or len(priorcount) == 0):
             print(f"cannot find prior count for time {prior_time}, day {day} from db, append 0")
             retval.append(0)
         else:
@@ -49,13 +51,13 @@ def getPriorCount(dt, id, cursor):
 def calculateCategory(count, totalCapacity):
     capacity = (count / totalCapacity)
     if capacity < 0.25:
-        res = 'almost_empty'
+        res = 0#'almost_empty'
     elif capacity < 0.5:
-        res = 'not_busy'
+        res = 1#'not_busy'
     elif capacity < 0.75:
-        res = 'busy'
+        res = 2#'busy'
     else:
-        res = 'almost_full'
+        res = 3#'almost_full'
     return res
 
 class outputData:
@@ -86,8 +88,8 @@ class outputData:
         query = f"""INSERT INTO {tableName} (day, time, day_in_week, class_in_session, 
         is_peak_hours, is_240, is_500, prior_count_15, prior_count_30, prior_count_45, prior_count_60, count, category) 
         VALUES ({self.day}, {self.time}, {self.dayofweek}, 
-        {self.class_in_session}, {self.is_peak_hours}, {self.is_240}, 
-        {self.is_500}, {self.prior_count[0]}, {self.prior_count[1]}, {self.prior_count[2]}, {self.prior_count[3]}, {self.count}, '{self.cat}')"""
+        {int(self.class_in_session)}, {int(self.is_peak_hours)}, {int(self.is_240)}, 
+        {int(self.is_500)}, {self.prior_count[0]}, {self.prior_count[1]}, {self.prior_count[2]}, {self.prior_count[3]}, {self.count}, '{self.cat}')"""
         #print("db query:", query)
         self.dbcursor.execute(query)
         conn.commit() #commit changes
@@ -98,7 +100,6 @@ class frameGrabber: # to get frames from url
         self.r=requests.get(url,stream=True)
         self.img=None
         self.stopped=False
-        #self.outFile = open("debug.txt", 'w')
         self.count = 0
         print(self.r.status_code)       
                   
@@ -127,10 +128,6 @@ class frameGrabber: # to get frames from url
                         jpg=img_bytes[a:b+2]
                         #jpg=img_bytes[a+2:b]
                         img_bytes=img_bytes[b+2:]
-                        #if (self.count < 1):
-                        #    self.outFile.write(str(jpg))
-                        #    self.outFile.write("\n")
-                        #    self.outFile.write(str(img_bytes))
                         self.img=cv2.imdecode(np.frombuffer(jpg,dtype=np.uint8), cv2.IMREAD_COLOR)
                         #self.img = jpg.decode()
                         self.count += 1
@@ -208,13 +205,12 @@ doorCounts[3] = 25
 maxcap = [10, 30, 50, 50]
 ## #init count for each room
 ## 
-url = 'https://2f14-128-2-149-254.ngrok-free.app/video_feed' #left cam, 39 pi
-url1 = 'https://347b-128-2-149-250.ngrok-free.app/video_feed' #right cam, 134 pi
+url = 'https://bfee-128-2-149-254.ngrok-free.app/video_feed' #left cam, 39 pi
+url1 = 'https://96f3-128-2-149-250.ngrok-free.app/video_feed' #right cam, 134 pi
 img_cap = frameGrabber(url).start()
 img_cap1 = frameGrabber(url1).start()
 time.sleep(3)
 for i in range(doorid):
-   
     doorDelays[i] = 0
 
 
@@ -239,8 +235,13 @@ tracks = []
 tracks1 = []
 
 #db connection
-dbFile = "/content/drive/MyDrive/rooms.sqlite"
-con = sqlite3.connect(dbFile)
+#dbFile = "/content/drive/MyDrive/rooms.sqlite"
+#con = sqlite3.connect(dbFile)
+#dbcursor = con.cursor()
+pwd = "p9D_Dq63QKuj6pEPwBKJ6DHukZUabGcG"
+user = "sobyzsdn"
+server = "salt.db.elephantsql.com"
+con = psycopg2.connect(host=server, user=user, password=pwd, dbname=user)
 dbcursor = con.cursor()
 
 
@@ -332,7 +333,7 @@ def selectDoors(event, x, y, flags, param):
         print("rightDoors,", rightDoors)
 
 #coords is the coordinates of the bounding box, ndarray of shape (4,): x1, y1, x2, y2
-def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, track):
+def checkCrossDoor(track_id, center, coords, left, ids_in, ids_out, dirMap, track):
      # model xy coordinates with slope
     global halfx # this is the middle of the frame
     global doorid # highest doorid
@@ -375,7 +376,6 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, t
                         and len(track[track_id]) > 5):
                         doorCounts[id] += 1
                         doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now(tz)) + "\n")
                         print(f'leftdoor:{id} increased count to {doorCounts[id]}')
                         ids_in.append(track_id)
                         print("in ids", ids_in)
@@ -388,7 +388,6 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, t
                         #print("trackid", track_id, "map", track[track_id], "tracks", tracks, "tracks1", tracks1)
                         doorCounts[id] -= 1
                         doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now(tz)) + "\n")
                         print(f'leftdoor:{id} decreased count to {doorCounts[id]}')
                         ids_out.append(track_id)
                         print("out ids", ids_in)
@@ -413,7 +412,6 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, t
                         and len(track[track_id]) > 5):
                         doorCounts[id] += 1
                         doorDelays[id] = time.time() * 1000 #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " + str(datetime.now(tz)) + "\n")
                         print(f'rightdoor:{id} increased count to {doorCounts[id]}')
                         ids_in.append(track_id)
                         print("in ids", ids_in)
@@ -423,7 +421,6 @@ def checkCrossDoor(track_id, center, coords, f, left, ids_in, ids_out, dirMap, t
                           and len(track[track_id]) < 5):
                         doorCounts[id] -= 1
                         doorDelays[id] = currTime #time in ms
-                        f.write(str(id) + ", count: " + str(doorCounts[id]) + "  " +  str(datetime.now(tz)) + "\n")
                         print(f'rightdoor:{id} decreased count to {doorCounts[id]}')
                         ids_out.append(track_id)
                         print("out ids", ids_in)
@@ -456,7 +453,7 @@ def liveVideo(conn, addr):
            #out.release()
         cv2.destroyAllWindows()
 
-def processFeed(frame, outfile, i) -> np.ndarray:
+def processFeed(frame, i) -> np.ndarray:
     #i = 0 -> right door
     #i = 1 -> left door
     labels, cords = score_frame(frame)
@@ -476,7 +473,7 @@ def processFeed(frame, outfile, i) -> np.ndarray:
             val1 = (int(coords[0]),int(coords[3]))
             val2 = (int(coords[2]), int(coords[3]))
             updateTrackMap(track_id, center, trackMap, dirMap)
-            checkCrossDoor(track_id, center, coords, outfile, False, inIds, outIds, dirMap=dirMap, track=trackMap)
+            checkCrossDoor(track_id, center, coords, False, inIds, outIds, dirMap=dirMap, track=trackMap)
             cv2.rectangle(f, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0,0,255), 2)
             cv2.line(f, val1, val2, (213, 255, 52), 2)
             cv2.putText(f, "ID: " + str(track_id), (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
@@ -500,7 +497,7 @@ def processFeed(frame, outfile, i) -> np.ndarray:
             val1 = (int(coords[0]),int(coords[3]))
             val2 = (int(coords[2]), int(coords[3]))
             updateTrackMap(track_id, center, trackMap1, dirMap1)
-            checkCrossDoor(track_id, center, coords, outfile, True, inIds1, outIds1, dirMap=dirMap1, track=trackMap1)
+            checkCrossDoor(track_id, center, coords, True, inIds1, outIds1, dirMap=dirMap1, track=trackMap1)
             cv2.rectangle(f, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0,0,255), 2)
             cv2.line(f, val1, val2, (213, 255, 52), 2)
             cv2.putText(f, "ID: " + str(track_id), (int(bbox[0]), int(bbox[1]) - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, (0,255,0), 1)
@@ -537,19 +534,19 @@ def processFeed(frame, outfile, i) -> np.ndarray:
     return f
 
 def dbUpdate():
-    for i in range(len(doorCounts)):
-        data = outputData(doorCounts[i], i, dbcursor)
+    for i in range(len(doorCounts) - 1):
+        if i == 0: #special count logic for bigroom
+          count = doorCounts[0] + doorCounts[3]
+        else:
+          count = doorCounts[i]
+        data = outputData(count, i, dbcursor)
         data.storeToDb(con) #insert update to dbfile
 
 
 def main():
-    outfile = open("test1.txt", 'w')
-    outfile1 = open("test2.txt", "w")
-    outfiles = (outfile, outfile1)
-
     #path = '/Users/bli/Desktop/500/CV/backend/footages/1680725348test.mp4' 
     #path1 = '/Users/bli/Desktop/500/CV/backend/footages/1680725378test.mp4'
-    out = cv2.VideoWriter("/content/drive/MyDrive/500/4-22-1850.mp4", cv2.VideoWriter_fourcc('m','p','4','v'), 10, (1280, 640))
+    out = cv2.VideoWriter("/content/drive/MyDrive/500/4-27-1640.mp4", cv2.VideoWriter_fourcc('m','p','4','v'), 10, (1280, 640))
 
     
     lastupdate = 0 #varaible tracking last update to db
@@ -571,7 +568,7 @@ def main():
                 lastupdate = currTime
                 dbUpdate() #code to update db
 
-            if (int(currTime - startTime) < 600000): #for 300 seconds
+            if (int(currTime - startTime) < 1200000): #for 300 seconds
                 frame = img_cap.read()
                 frame1 = img_cap1.read()
                 frameCounter += 1
@@ -586,7 +583,7 @@ def main():
                     else:
                         subFrame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) #for video in incorrect dimension
                     subFrame = cv2.resize(subFrame, (framex,framey))
-                    outputFrames[i] = processFeed(subFrame, outfiles[i], i)
+                    outputFrames[i] = processFeed(subFrame, i)
 
                     
                     #print("key", key)
@@ -612,13 +609,13 @@ def main():
         print("ending task by interrupt")
         #videoInput.release()
         cv2.destroyAllWindows()
-        outfile.close()
+        con.close()
         return 0
     #end of loop
     print("ending task")
     #videoInput.release()
     cv2.destroyAllWindows()
-    outfile.close()
+    con.close()
     return 0
 
    
