@@ -1,0 +1,143 @@
+#id_header_div {
+    margin-top: 0px;
+    width: 100vw;
+    height: 13vw;
+    background-color: deepskyblue;
+}
+
+#id_user_name {
+    font-size: x-large;
+    font-weight: bold;
+}
+
+.row {
+    display: flex;
+}
+
+.column {
+    flex: 50%;
+    padding: 10px;
+}
+
+/* Clear floats after the columns */
+/* .row:after {
+    content: "";
+    display: table;
+    clear: both;
+} */
+
+.big-heading {
+    font-size: xx-large;
+    font-weight: bold;
+    font-family: sans-serif;
+    text-align: center;
+    padding: 15px 0px;
+    margin-bottom: 0px;
+}
+
+.user-info {
+    text-align: right;
+    font-family: sans-serif; 
+    padding-right: 10px;
+    font-size: large;
+}
+
+.message {
+    color:blue;
+    text-align: center;
+    font-weight: bold;
+    font-size: x-large;
+    font-family: sans-serif;
+    padding: 25px 0px;
+}
+
+.search-bar {
+    text-align: center;
+    padding: 25px 0px;
+}
+
+.content {
+    margin-left: auto;
+    margin-right: auto;
+    width: 70%;
+    font-family: sans-serif;
+    font-size: x-large;
+    padding: 5px 10px;
+}
+
+.error {
+    color:red;
+}
+
+.list {
+    padding: 3px;
+}
+
+.list-link {
+    padding: 5px;
+}
+
+.list-link:hover {
+     background-color:lightgray;
+}
+
+th {
+    font-weight: normal;
+    text-align: left;
+}
+
+a {
+     text-decoration: none;
+     color:black;
+}
+
+button {
+    font-size: x-large;
+    padding: 3px;
+}
+
+input {
+    max-width: 20vw;
+    font-size: x-large;
+}
+
+div, form {
+    padding: 4px;
+    line-height: normal;
+}
+
+
+.navlink {
+    background-color: lightgray;
+}
+
+.letter {
+    padding: 3px;
+    font-family: sans-serif;
+    font-size: x-large;
+
+}
+
+.letter:hover {
+    background-color:lightgray;
+}
+
+img {
+    max-width: 30vw;
+    max-height: 30vw;
+}
+
+#id_bio_input_text {
+    height: 7vw;
+    width: 20vw;
+    font-size: 14pt;
+}
+
+p[id^="id_comment_div"] {
+    margin-left: 35px;
+}
+
+
+label[id^="id_comment_input_text"] {
+    margin-left: 35px;
+}
