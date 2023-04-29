@@ -9,7 +9,12 @@ from django.contrib.auth import authenticate, login, logout
 from peoplecounter.forms import LoginForm, RegisterForm
 
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, timedelta
+import psycopg2
+
+pwd = "p9D_Dq63QKuj6pEPwBKJ6DHukZUabGcG"
+user = "sobyzsdn"
+server = "salt.db.elephantsql.com"
 
 # Create your views here.
 
@@ -28,10 +33,28 @@ def global_stream_action(request):
     # if request.method == 'GET':
     #     context['form'] = RegisterForm()
     #     return render(request, '../templates/register.html', context)
-
+    
     context = _compute_context_global()
 
     return render(request, '../templates/global.html', context)
+
+def getInfoFromDB(roomNum):
+  dbConnection = psycopg2.connect(host=server, user=user, password=pwd, dbname=user)
+  dbcursor = dbConnection.cursor()
+    # tz = timezone('US/Eastern')
+  t = datetime.now() - timedelta(minutes=1) # subtrack one minute
+  time = t.hour * 100 + t.minute
+  day = t.month * 100 + t.day
+  query = f"SELECT * from room{roomNum} WHERE day={day} AND time={time};"
+  dbcursor.execute(query)
+  res = dbcursor.fetchone() # get one result
+  print(type(res))
+  if res is None or len(res) == 0:
+    # if result is empty
+    print(f"data for room {roomNum} at day {day} time {time} not found in db")
+    res = "NOT AVAILABLE"
+    return res # returns None on error
+  return res
 
 def _compute_context_global():
     curYear = datetime.now().year
@@ -40,11 +63,18 @@ def _compute_context_global():
     curHour = datetime.now().strftime('%H')
     curMin = datetime.now().strftime('%M')
 
+    if getInfoFromDB(0) == "NOT AVAILABLE":
+        res = "NOT AVAILABLE"
+    else:
+        res = getInfoFromDB(0)[11]
+    print(res)
+
     context = {"curYear": curYear,
                "curMonth": curMonth,
                "curDay": curDay,
                "curHour": curHour,
                "curMin": curMin,
+               "res": res
     }
     return context
 
